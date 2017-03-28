@@ -1,0 +1,75 @@
+require(XML)
+require(tm)
+require(wordcloud)
+require(RColorBrewer)
+setwd("D:/r")
+t1 = readLines("mahabharata new.txt")
+ap.corpus <- Corpus(DataframeSource(data.frame(as.character(t1))))
+ap.corpus <- tm_map(ap.corpus, removePunctuation)
+ap.corpus <- tm_map(ap.corpus, tolower)
+ap.corpus <- tm_map(ap.corpus, function(x) removeWords(x, stopwords("english")))
+ap.corpus <- tm_map(ap.corpus, removeWords, c("said"))
+ap.corpus <- tm_map(ap.corpus, removeNumbers) 
+ap.corpus <- tm_map(ap.corpus, PlainTextDocument)
+ap.corpus <-tm_map(ap.corpus, stemDocument)
+
+ap.tdm <- TermDocumentMatrix(ap.corpus)
+ap.tdm
+ap.m <- as.matrix(ap.tdm)
+ap.v <- sort(rowSums(ap.m),decreasing=TRUE)
+d <- data.frame(word = names(ap.v),freq=ap.v)
+head(d, 20)
+ap.d <- data.frame(word = names(ap.v),freq=ap.v)
+table(ap.d$freq)
+pal2 <- brewer.pal(8,"Dark2")
+png("wordcloud_mahabharara.png", width=1280,height=800)
+wordcloud(ap.d$word,ap.d$freq, scale=c(8,.4),min.freq=3,max.words=Inf,
+          random.order=FALSE, rot.per=.15, colors=pal2)
+dev.off()
+
+findAssocs(ap.tdm, 'arjuna', 0.10)
+findAssocs(ap.tdm, 'pandava', 0.10)
+findAssocs(ap.tdm, 'kaurava', 0.10)
+findAssocs(ap.tdm, 'duryodhana', 0.10)
+findAssocs(ap.tdm, 'yudhishthira', 0.10)
+findAssocs(ap.tdm, 'krishna', 0.10)
+
+
+#LDA
+dtm <- as.DocumentTermMatrix(ap.tdm)
+library(topicmodels)
+#Find the sum of words in each Document
+rowTotals <- apply(dtm , 1, sum) 
+#remove all docs without words
+dtm.new   <- dtm[rowTotals> 0, ]           
+lda <- LDA(dtm.new, k = 5) 
+term <- terms(lda, 10)
+term
+
+#sentiment
+library(syuzhet)
+library(lubridate)
+library(ggplot2)
+library(scales)
+library(reshape2)
+library(dplyr)
+mySentiment <- get_nrc_sentiment(t1)
+head(colSums(mySentiment))
+text_sentm <- cbind(t1, mySentiment)
+head(text_sentm)
+sentimentTotals <- data.frame(colSums(text_sentm[,c(2:11)]))
+
+names(sentimentTotals) <- "count"
+sentimentTotals <- cbind("sentiment" = rownames(sentimentTotals), sentimentTotals)
+rownames(sentimentTotals) <- NULL
+ggplot(data = sentimentTotals, aes(x = sentiment, y = count)) +
+  geom_bar(aes(fill = sentiment), stat = "identity") +
+  theme(legend.position = "none") +
+  xlab("Sentiment") + ylab("Total Count") + ggtitle("Total Sentiment Score for Mahabharata")
+
+#cluster analysis
+myTdm2 <- removeSparseTerms(ap.tdm, sparse=0.97)
+m2 <- as.matrix(myTdm2)
+distMatrix <- dist(scale(m2))
+fit <- hclust(distMatrix, method="ward")
+plot(fit)
